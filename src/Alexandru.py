@@ -1,9 +1,10 @@
+from collections import deque
 from src.DriveInterface import DriveInterface
 from src.DriveState import DriveState
 from src.Constants import DriveMove, SensorData
 from src.Utils import manhattan_dist_2D
 
-class YourAgent(DriveInterface):
+class Alexandru(DriveInterface):
 
     def __init__(self, game_id: int, is_advanced_mode: bool):
         """
@@ -15,6 +16,7 @@ class YourAgent(DriveInterface):
         """
         self.game_id = game_id
         self.need_to_find_target_pod = is_advanced_mode
+        self.picked_up = False
 
     # This is the main function the simulator will call each turn
     def get_next_move(self, sensor_data: dict) -> DriveMove:
@@ -48,4 +50,37 @@ class YourAgent(DriveInterface):
             DriveMove.LIFT_POD – If a pod is in the same tile, pick it up. The pod will now move with the drive until it is dropped
             DriveMove.DROP_POD – If a pod is in the same tile, drop it. The pod will now stay in this position until it is picked up
         """
-        pass
+
+        def bfs(destination, obstacles, user_x, user_y):
+            queue = deque()
+            visited = {user_x, user_y}
+            queue.append((DriveMove.UP, user_x, user_y + 1))
+            queue.append((DriveMove.RIGHT, user_x + 1, user_y))
+            queue.append((DriveMove.DOWN, user_x, user_y - 1))
+            queue.append((DriveMove.LEFT, user_x - 1, user_y))
+
+            while len(queue) != 0:
+                direction, x, y = queue.popleft()
+                if (x, y) in visited or [x, y] in obstacles:
+                    continue
+                if [x, y] in destination:
+                    return direction
+                if (0 <= x < 40) and (0 <= y < 40):
+                    visited.add((x, y))
+                    queue.append((direction, x, y + 1))
+                    queue.append((direction, x + 1, y))
+                    queue.append((direction, x, y - 1))
+                    queue.append((direction, x - 1, y))
+            return DriveMove.NONE
+
+        user_x, user_y = sensor_data[SensorData.PLAYER_LOCATION]
+        if self.need_to_find_target_pod and not self.picked_up:
+            if [user_x, user_y] == sensor_data[SensorData.TARGET_POD_LOCATION]:
+                self.picked_up = True
+                return DriveMove.LIFT_POD
+            return bfs([sensor_data[SensorData.TARGET_POD_LOCATION]], sensor_data[SensorData.DRIVE_LOCATIONS], user_x,
+                       user_y)
+        if self.picked_up:
+            return bfs(sensor_data[SensorData.GOAL_LOCATIONS],
+                       sensor_data[SensorData.DRIVE_LOCATIONS] + sensor_data[SensorData.POD_LOCATIONS], user_x, user_y)
+        return bfs(sensor_data[SensorData.GOAL_LOCATIONS], sensor_data[SensorData.DRIVE_LOCATIONS], user_x, user_y)
